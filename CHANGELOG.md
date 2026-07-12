@@ -6,6 +6,10 @@
   snapshot older than the TTL is treated as a miss and re-rendered, bounding
   staleness without an S3 lifecycle rule. Defaults to no expiry, preserving the
   previous behavior.
+- Drop the deprecated `REDUCED_REDUNDANCY` storage class from S3 cache writes so
+  the default (`STANDARD`) is used. `REDUCED_REDUNDANCY` is unsupported by
+  non-AWS S3 providers (e.g. Scaleway), which rejected every PUT with
+  `InvalidStorageClass` and left the cache empty.
 
 ## 7.3.0 - 2026-07-11
 

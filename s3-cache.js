@@ -54,7 +54,6 @@ module.exports = {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: getKey(req),
             ContentType: 'text/html;charset=UTF-8',
-            StorageClass: 'REDUCED_REDUNDANCY',
             Body: req.prerender.content
         })).catch((error) => {
             console.error(error);
