@@ -1,5 +1,14 @@
 # Changelog
 
+## 7.5.0 - 2026-07-12
+
+- S3 cache is now status-aware. The write moved to the `beforeSend` hook, which
+  runs after `httpHeaders` has applied the page's `prerender-status-code` meta,
+  so the real status code is stored in S3 object metadata and both `200` and
+  `404` are cached. On a hit the stored status is replayed, so a page the app
+  marks not-found is served as `404` instead of a soft `200`, and 404s stay
+  cached rather than re-rendering on every crawl.
+
 ## 7.4.0 - 2026-07-12
 
 - Add optional `S3_CACHE_TTL` (seconds) to the S3 cache plugin: a cached

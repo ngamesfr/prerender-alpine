@@ -84,6 +84,11 @@ The built-in S3 cache integration is not activated by default. Enable it with
 `S3_CACHE=1`. It preserves the behavior of the former
 `prerender-aws-s3-cache` package while using AWS SDK v3.
 
+Both `200` and `404` responses are cached. The render's final status code
+(applied by the built-in `httpHeaders` plugin from a `prerender-status-code`
+meta tag) is stored in S3 object metadata and replayed on a hit, so not-found
+pages are served as `404` rather than a soft `200`.
+
 You'll need to sign up with S3 compatible service and set these 3 environment variables:
 
 - `AWS_ACCESS_KEY_ID`

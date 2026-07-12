@@ -6,6 +6,9 @@ const s3 = new S3Client({});
 
 const cacheTtl = Number(process.env.S3_CACHE_TTL) || 0;
 
+// Cache only stable outcomes; storing 404 avoids re-rendering dead URLs each crawl.
+const CACHEABLE_STATUS = new Set([200, 404]);
+
 function getKey(req) {
     if (process.env.S3_PREFIX_KEY) {
         return `${process.env.S3_PREFIX_KEY}/${req.prerender.url}`;
@@ -40,13 +43,17 @@ module.exports = {
                 return next();
             }
 
-            const body = await result.Body.transformToByteArray();
-            res.send(200, Buffer.from(body));
+            const status = Number(result.Metadata && result.Metadata['status-code']) || 200;
+            const body = Buffer.from(await result.Body.transformToByteArray());
+            req.prerender.fromCache = true;
+            res.send(status, body);
         }).catch(() => next());
     },
 
-    pageLoaded(req, res, next) {
-        if (req.prerender.statusCode !== 200) {
+    // beforeSend runs after httpHeaders sets the final status (even for 404s);
+    // fromCache guards against re-writing what a hit just served.
+    beforeSend(req, res, next) {
+        if (req.prerender.fromCache || !CACHEABLE_STATUS.has(req.prerender.statusCode)) {
             return next();
         }
 
@@ -54,6 +61,7 @@ module.exports = {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: getKey(req),
             ContentType: 'text/html;charset=UTF-8',
+            Metadata: { 'status-code': String(req.prerender.statusCode) },
             Body: req.prerender.content
         })).catch((error) => {
             console.error(error);
