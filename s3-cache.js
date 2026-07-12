@@ -4,12 +4,26 @@ const { GetObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/clien
 
 const s3 = new S3Client({});
 
+const cacheTtl = Number(process.env.S3_CACHE_TTL) || 0;
+
 function getKey(req) {
     if (process.env.S3_PREFIX_KEY) {
         return `${process.env.S3_PREFIX_KEY}/${req.prerender.url}`;
     }
 
     return req.prerender.url;
+}
+
+function isFresh(lastModified) {
+    if (cacheTtl <= 0) {
+        return true;
+    }
+
+    if (!lastModified) {
+        return false;
+    }
+
+    return Date.now() - new Date(lastModified).getTime() < cacheTtl * 1000;
 }
 
 module.exports = {
@@ -22,7 +36,7 @@ module.exports = {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: getKey(req)
         })).then(async (result) => {
-            if (!result.Body) {
+            if (!result.Body || !isFresh(result.LastModified)) {
                 return next();
             }
 

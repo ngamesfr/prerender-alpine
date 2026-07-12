@@ -92,6 +92,11 @@ You'll need to sign up with S3 compatible service and set these 3 environment va
 
 `S3_PREFIX_KEY` can optionally prefix every cache object key.
 
+`S3_CACHE_TTL` optionally expires cached snapshots after a number of seconds. A
+cached object older than the TTL is treated as a miss and re-rendered,
+overwriting the stale entry. When unset (the default) cached objects never
+expire and you must rely on an S3 bucket lifecycle rule instead.
+
 The deleted upstream repository is no longer a usable documentation source;
 runtime options can still be inspected on the
 [`prerender` npm package page](https://www.npmjs.com/package/prerender).

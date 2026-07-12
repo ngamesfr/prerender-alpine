@@ -1,5 +1,12 @@
 # Changelog
 
+## 7.4.0 - 2026-07-12
+
+- Add optional `S3_CACHE_TTL` (seconds) to the S3 cache plugin: a cached
+  snapshot older than the TTL is treated as a miss and re-rendered, bounding
+  staleness without an S3 lifecycle rule. Defaults to no expiry, preserving the
+  previous behavior.
+
 ## 7.3.0 - 2026-07-11
 
 Changes from the upstream fork point (`tvanro/prerender-alpine` 7.2.0):
