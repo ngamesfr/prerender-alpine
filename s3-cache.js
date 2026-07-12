@@ -53,7 +53,9 @@ module.exports = {
     // beforeSend runs after httpHeaders sets the final status (even for 404s);
     // fromCache guards against re-writing what a hit just served.
     beforeSend(req, res, next) {
-        if (req.prerender.fromCache || !CACHEABLE_STATUS.has(req.prerender.statusCode)) {
+        // httpHeaders sets statusCode from a regex capture, so it can be a string.
+        const status = Number(req.prerender.statusCode);
+        if (req.prerender.fromCache || !CACHEABLE_STATUS.has(status)) {
             return next();
         }
 
@@ -61,7 +63,7 @@ module.exports = {
             Bucket: process.env.S3_BUCKET_NAME,
             Key: getKey(req),
             ContentType: 'text/html;charset=UTF-8',
-            Metadata: { 'status-code': String(req.prerender.statusCode) },
+            Metadata: { 'status-code': String(status) },
             Body: req.prerender.content
         })).catch((error) => {
             console.error(error);
