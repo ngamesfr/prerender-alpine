@@ -2,7 +2,18 @@
 
 const { GetObjectCommand, PutObjectCommand, S3Client } = require('@aws-sdk/client-s3');
 
-const s3 = new S3Client({});
+// The SDK applies no timeout by default, so a hung socket stalls the render for
+// as long as the peer holds it open. Prerender's own 10s plugin guard fires but
+// leaves the promise pending, so the request keeps its slot: one observed render
+// took 30 minutes. Both hooks sit in the request path, and the timeouts are
+// sequential (connect, then response), so the pair is spent twice per render:
+// 1.5s worst case each, against a healthy round trip measured at 150-350ms.
+// No retry: a failed read is a miss we render anyway and a failed write is redone
+// by the next crawl, so both have a fallback cheaper than waiting.
+const s3 = new S3Client({
+    maxAttempts: 1,
+    requestHandler: { connectionTimeout: 500, requestTimeout: 1000 }
+});
 
 const cacheTtl = Number(process.env.S3_CACHE_TTL) || 0;
 

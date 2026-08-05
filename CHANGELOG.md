@@ -1,5 +1,16 @@
 # Changelog
 
+## 7.6.0 - 2026-08-05
+
+- Bound the S3 cache client: 500ms connection timeout, 1s request timeout, and no
+  retries. The AWS SDK applies no timeout by default, so a hung socket to the
+  storage provider stalled a render for as long as the peer kept it open.
+  Prerender's 10s plugin guard fires and logs `Plugin event ... timed out`, but
+  the underlying promise stays pending and the request holds its render slot:
+  observed renders of 10s, 21s and 1801s against a 5s `PAGE_LOAD_TIMEOUT`, which
+  surfaced upstream as `504`s. Both hooks already fall through on error, so a
+  timed-out read now renders normally and a timed-out write skips the cache.
+
 ## 7.5.0 - 2026-07-12
 
 - S3 cache is now status-aware. The write moved to the `beforeSend` hook, which
