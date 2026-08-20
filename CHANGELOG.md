@@ -1,5 +1,16 @@
 # Changelog
 
+## 7.7.4 - 2026-08-20
+
+- Detach a tab's CDP listeners before closing it. The `blockResources` plugin answers
+  `Network.requestIntercepted` with `continueInterceptedRequest` without awaiting it
+  or catching, so an event arriving while the tab's socket is closing rejects with
+  `WebSocket is not open: readyState 2 (CLOSING)` and nobody listening. That is an
+  unhandled rejection, which exits the process. 7.7.0 introduced the race by closing
+  the tab's own socket, where the per-request browser connection used to be torn down
+  wholesale instead. Orphaned tabs reaped on the timer now get the same treatment and
+  have their client socket closed too, which it previously leaked.
+
 ## 7.7.3 - 2026-08-20
 
 - Reap orphaned targets at 75s instead of 120s, swept every 15s instead of 60s, so

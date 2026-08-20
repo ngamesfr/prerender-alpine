@@ -73,7 +73,24 @@ function getBrowser(browser, url) {
 // slow success into a failed crawl.
 const REAP_AFTER_MS = 75000;
 const REAP_EVERY_MS = 15000;
-const openedAt = new Map();
+const openTabs = new Map();
+
+// blockResources answers intercepted requests without awaiting them, so an event
+// landing mid-teardown sends on a closing socket and rejects with nobody listening,
+// which takes the process down. Detaching first means the handler cannot fire.
+async function discardTab(targetId, tab, browser) {
+    if (tab) {
+        tab.removeAllListeners();
+    }
+
+    try {
+        await browser.Target.closeTarget({ targetId });
+    } finally {
+        if (tab) {
+            await tab.close();
+        }
+    }
+}
 
 async function reapOrphanedTargets() {
     if (!browserPromise) {
@@ -83,15 +100,15 @@ async function reapOrphanedTargets() {
     const browser = await browserPromise;
     const cutoff = Date.now() - REAP_AFTER_MS;
 
-    for (const [targetId, createdAt] of openedAt) {
-        if (createdAt > cutoff) {
+    for (const [targetId, entry] of openTabs) {
+        if (entry.openedAt > cutoff) {
             continue;
         }
 
-        openedAt.delete(targetId);
+        openTabs.delete(targetId);
 
         try {
-            await browser.Target.closeTarget({ targetId });
+            await discardTab(targetId, entry.tab, browser);
             util.log('closed orphaned target', targetId);
         } catch (err) {
             util.log('unable to close orphaned target', targetId, err);
@@ -107,7 +124,7 @@ const connect = chrome.connect;
 
 chrome.connect = function () {
     browserPromise = null;
-    openedAt.clear();
+    openTabs.clear();
 
     return connect.call(this);
 };
@@ -117,9 +134,13 @@ chrome.openTab = async function (options) {
     const browser = await getBrowser(this, url);
     const { targetId } = await browser.Target.createTarget({ url: 'about:blank' });
 
-    openedAt.set(targetId, Date.now());
+    const entry = { openedAt: Date.now(), tab: null };
+
+    openTabs.set(targetId, entry);
 
     const tab = await connectWithRetry(targetId, this.options.browserDebuggingPort, url);
+
+    entry.tab = tab;
 
     tab.browser = browser;
     tab.prerender = options;
@@ -139,11 +160,7 @@ chrome.openTab = async function (options) {
 };
 
 chrome.closeTab = async function (tab) {
-    openedAt.delete(tab.target);
+    openTabs.delete(tab.target);
 
-    try {
-        await tab.browser.Target.closeTarget({ targetId: tab.target });
-    } finally {
-        await tab.close();
-    }
+    await discardTab(tab.target, tab, tab.browser);
 };
