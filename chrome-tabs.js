@@ -2,6 +2,7 @@
 
 const CDP = require('chrome-remote-interface');
 const chrome = require('prerender/lib/browsers/chrome');
+const server = require('prerender/lib/server');
 const util = require('prerender/lib/util.js');
 
 const host = '127.0.0.1';
@@ -63,18 +64,6 @@ function getBrowser(browser, url) {
     return pending;
 }
 
-// prerender's 60s watchdog drops a hung request without closing its tab. That used
-// to leak a whole browser context; now it leaves an about:blank target in the shared
-// one, where Chrome packs same-site targets into a handful of renderers and a stuck
-// page starves every render sharing its main thread. Prod reached 41 of them.
-// 75s, not the 5s page timeout: the S3 hooks sit in the request path behind a 10s
-// guard each, so successful renders reach 41s and abandoned ones finish at ~63s,
-// just after the library's own 60s watchdog gives up. Reaping earlier would turn a
-// slow success into a failed crawl.
-const REAP_AFTER_MS = 75000;
-const REAP_EVERY_MS = 15000;
-const openTabs = new Map();
-
 // blockResources answers intercepted requests without awaiting them, so an event
 // landing mid-teardown sends on a closing socket and rejects with nobody listening,
 // which takes the process down. Detaching first means the handler cannot fire.
@@ -92,39 +81,41 @@ async function discardTab(targetId, tab, browser) {
     }
 }
 
-async function reapOrphanedTargets() {
+// prerender's 60s watchdog gives a hung render up without closing the target it
+// opened, which is the whole leak: an about:blank target left in the shared context,
+// where Chrome packs same-site targets into a handful of renderers and a stuck page
+// starves every render on that main thread. Prod reached 41 of them. Hook the moment
+// the library abandons the request rather than running a second timer against a
+// threshold of our own; targetId is cleared by closeTab, so this only sees leaks.
+const removeRequestFromInFlight = server.removeRequestFromInFlight;
+
+server.removeRequestFromInFlight = function (req) {
+    const abandoned = req && req.prerender && req.prerender.targetId;
+
+    if (abandoned) {
+        const { targetId, tab } = req.prerender;
+
+        req.prerender.targetId = null;
+
+        discardAbandonedTarget(targetId, tab).catch((err) => util.log('unable to close abandoned target', targetId, err));
+    }
+
+    return removeRequestFromInFlight.call(this, req);
+};
+
+async function discardAbandonedTarget(targetId, tab) {
     if (!browserPromise) {
         return;
     }
 
-    const browser = await browserPromise;
-    const cutoff = Date.now() - REAP_AFTER_MS;
-
-    for (const [targetId, entry] of openTabs) {
-        if (entry.openedAt > cutoff) {
-            continue;
-        }
-
-        openTabs.delete(targetId);
-
-        try {
-            await discardTab(targetId, entry.tab, browser);
-            util.log('closed orphaned target', targetId);
-        } catch (err) {
-            util.log('unable to close orphaned target', targetId, err);
-        }
-    }
+    await discardTab(targetId, tab, await browserPromise);
+    util.log('closed abandoned target', targetId);
 }
-
-setInterval(() => {
-    reapOrphanedTargets().catch((err) => util.log('target reaper failed', err));
-}, REAP_EVERY_MS).unref();
 
 const connect = chrome.connect;
 
 chrome.connect = function () {
     browserPromise = null;
-    openTabs.clear();
 
     return connect.call(this);
 };
@@ -134,13 +125,13 @@ chrome.openTab = async function (options) {
     const browser = await getBrowser(this, url);
     const { targetId } = await browser.Target.createTarget({ url: 'about:blank' });
 
-    const entry = { openedAt: Date.now(), tab: null };
-
-    openTabs.set(targetId, entry);
+    // Own the target from the moment it exists: the library only records it once
+    // openTab resolves, so a hang in here would otherwise leave nobody to close it.
+    options.targetId = targetId;
 
     const tab = await connectWithRetry(targetId, this.options.browserDebuggingPort, url);
 
-    entry.tab = tab;
+    options.tab = tab;
 
     tab.browser = browser;
     tab.prerender = options;
@@ -160,7 +151,9 @@ chrome.openTab = async function (options) {
 };
 
 chrome.closeTab = async function (tab) {
-    openTabs.delete(tab.target);
+    if (tab.prerender) {
+        tab.prerender.targetId = null;
+    }
 
     await discardTab(tab.target, tab, tab.browser);
 };
