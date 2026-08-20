@@ -1,5 +1,16 @@
 # Changelog
 
+## 7.8.0 - 2026-08-20
+
+- Close abandoned targets from the library's own give-up point instead of a second
+  timer. 7.7.2 added a sweep on a 75s threshold picked here; prerender already decides
+  a render is dead at its 60s watchdog and calls `removeRequestFromInFlight`, so that
+  call is now wrapped and closes whatever target the request still owns. One clock
+  instead of two, and no threshold of our own to justify.
+- The target is recorded on the request as soon as it exists rather than when
+  `openTab` resolves, so a hang inside `openTab` still leaves an owner to clean up.
+  That was the actual production case: all 41 leaked targets sat at `about:blank`.
+
 ## 7.7.4 - 2026-08-20
 
 - Detach a tab's CDP listeners before closing it. The `blockResources` plugin answers
