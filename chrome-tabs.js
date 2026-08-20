@@ -2,6 +2,7 @@
 
 const CDP = require('chrome-remote-interface');
 const chrome = require('prerender/lib/browsers/chrome');
+const health = require('./health');
 const server = require('prerender/lib/server');
 const util = require('prerender/lib/util.js');
 
@@ -90,14 +91,22 @@ async function discardTab(targetId, tab, browser) {
 const removeRequestFromInFlight = server.removeRequestFromInFlight;
 
 server.removeRequestFromInFlight = function (req) {
-    const abandoned = req && req.prerender && req.prerender.targetId;
+    const prerender = req && req.prerender;
+    const abandoned = prerender && prerender.targetId;
 
     if (abandoned) {
-        const { targetId, tab } = req.prerender;
+        const { targetId, tab } = prerender;
 
-        req.prerender.targetId = null;
+        prerender.targetId = null;
 
         discardAbandonedTarget(targetId, tab).catch((err) => util.log('unable to close abandoned target', targetId, err));
+    }
+
+    // Called again from the chain's finally, and skipped for cache hits, which never
+    // reach Chrome and so say nothing about whether it still renders.
+    if (prerender && prerender.usedChrome && !prerender.outcomeRecorded) {
+        prerender.outcomeRecorded = true;
+        health.recordOutcome(abandoned);
     }
 
     return removeRequestFromInFlight.call(this, req);
@@ -128,6 +137,7 @@ chrome.openTab = async function (options) {
     // Own the target from the moment it exists: the library only records it once
     // openTab resolves, so a hang in here would otherwise leave nobody to close it.
     options.targetId = targetId;
+    options.usedChrome = true;
 
     const tab = await connectWithRetry(targetId, this.options.browserDebuggingPort, url);
 

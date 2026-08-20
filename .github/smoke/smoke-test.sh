@@ -70,3 +70,9 @@ if (( open_targets > 5 )); then
     echo "leaked targets: ${open_targets}" >&2
     exit 1
 fi
+
+# Liveness restarts the container on this marker, so a healthy run must never set it.
+if docker exec "${prerender_container}" test -f /tmp/prerender-unhealthy; then
+    echo "health marker set after a healthy run" >&2
+    exit 1
+fi

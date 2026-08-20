@@ -1,5 +1,21 @@
 # Changelog
 
+## 7.9.0 - 2026-08-20
+
+- Report render health to the liveness probe. Chrome can degrade while the DevTools
+  endpoint stays perfectly healthy, because it is served by the browser process: a
+  production pod dropped 12 renders against 1 served over 15 minutes, passed every
+  probe, and kept taking traffic it could not serve. Target count was considered as a
+  signal and rejected, since it only catches degradation that leaks tabs, which is the
+  one cause already fixed.
+- Outcomes are recorded where the library gives up on a request. If half of the last
+  20 renders were abandoned, `/tmp/prerender-unhealthy` is written and the probe fails,
+  so the pod restarts itself instead of waiting to be noticed. Cache hits are ignored,
+  as they never reach Chrome, and a pod with no traffic never reaches the sample floor,
+  so silence is not read as sickness.
+- The marker is cleared on boot so a restarted pod cannot find its own verdict and loop,
+  and the tracking never throws: a bug in it must not be able to restart the fleet.
+
 ## 7.8.0 - 2026-08-20
 
 - Close abandoned targets from the library's own give-up point instead of a second
