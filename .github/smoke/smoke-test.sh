@@ -65,7 +65,7 @@ done
 
 # Targets share renderer processes, so a leaked tab starves every render sitting in
 # the same one. Closing them must return the browser to its handful of own targets.
-open_targets="$(docker exec "${prerender_container}" sh -c 'wget -qO- http://127.0.0.1:9222/json/list | grep -c "\"id\":"')"
+open_targets="$(docker exec "${prerender_container}" sh -c 'wget -qO- http://127.0.0.1:9222/json/list | grep -c "\"id\":" || true')"
 if (( open_targets > 5 )); then
     echo "leaked targets: ${open_targets}" >&2
     exit 1

@@ -21,8 +21,8 @@ const prMemoryCache = require('prerender-memory-cache');
 require('./chrome-tabs');
 
 const server = prerender({
-    chromeFlags: ['--no-sandbox', '--headless', '--disable-gpu', '--remote-debugging-port=9222', '--hide-scrollbars', '--disable-dev-shm-usage'],
-    chromeLocation: '/usr/bin/chromium-browser'
+    chromeFlags: ['--no-sandbox', '--disable-gpu', '--remote-debugging-port=9222', '--hide-scrollbars', '--disable-dev-shm-usage'],
+    chromeLocation: '/usr/bin/chromium-headless-shell'
 });
 
 const blockResources = Number(process.env.BLOCK_RESOURCES) || 0;
