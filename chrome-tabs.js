@@ -67,8 +67,12 @@ function getBrowser(browser, url) {
 // to leak a whole browser context; now it leaves an about:blank target in the shared
 // one, where Chrome packs same-site targets into a handful of renderers and a stuck
 // page starves every render sharing its main thread. Prod reached 41 of them.
-const REAP_AFTER_MS = 120000;
-const REAP_EVERY_MS = 60000;
+// 75s, not the 5s page timeout: the S3 hooks sit in the request path behind a 10s
+// guard each, so successful renders reach 41s and abandoned ones finish at ~63s,
+// just after the library's own 60s watchdog gives up. Reaping earlier would turn a
+// slow success into a failed crawl.
+const REAP_AFTER_MS = 75000;
+const REAP_EVERY_MS = 15000;
 const openedAt = new Map();
 
 async function reapOrphanedTargets() {

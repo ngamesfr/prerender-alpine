@@ -1,5 +1,15 @@
 # Changelog
 
+## 7.7.3 - 2026-08-20
+
+- Reap orphaned targets at 75s instead of 120s, swept every 15s instead of 60s, so
+  an orphan lives at most 90s rather than 180s. The bound is set by the library's
+  60s watchdog rather than by `PAGE_LOAD_TIMEOUT`: the S3 cache hooks sit in the
+  request path behind a 10s plugin guard each, so production shows successful
+  renders at 41s and abandoned ones completing at ~63s. Anything still open at 75s
+  has already been given up on, while reaping nearer the 5s page timeout would turn
+  a slow success into a failed crawl.
+
 ## 7.7.2 - 2026-08-20
 
 - Reap orphaned targets. Prerender's 60s watchdog drops a hung request without
