@@ -62,3 +62,11 @@ for _ in 1 2; do
     storage_response="$(curl_render storage)"
     grep --fixed-strings --quiet 'storage-seen:false cookie-seen:false' <<<"${storage_response}"
 done
+
+# Targets share renderer processes, so a leaked tab starves every render sitting in
+# the same one. Closing them must return the browser to its handful of own targets.
+open_targets="$(docker exec "${prerender_container}" sh -c 'wget -qO- http://127.0.0.1:9222/json/list | grep -c "\"id\":"')"
+if (( open_targets > 5 )); then
+    echo "leaked targets: ${open_targets}" >&2
+    exit 1
+fi

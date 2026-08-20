@@ -1,5 +1,23 @@
 # Changelog
 
+## 7.7.2 - 2026-08-20
+
+- Reap orphaned targets. Prerender's 60s watchdog drops a hung request without
+  closing its tab, so every hung render leaks an `about:blank` target. Before
+  7.7.0 that leaked a whole browser context and went unnoticed, because the
+  Chrome deadlock restarted the container every ~90 minutes and reset the count.
+  With the deadlock gone a pod survives for hours and the leak accumulates:
+  production reached 41 orphaned targets, at which point the pod served 1 render
+  against 12 dropped, with CPU at 238m.
+- Targets in the shared context are packed by Chrome into a handful of renderer
+  processes, so a stuck page starves every render sitting on the same main
+  thread. This is invisible to the health check: the DevTools endpoint is served
+  by the browser process and keeps answering instantly, so the pod stays Ready
+  and keeps taking traffic it cannot serve.
+- Targets opened here are now tracked and closed once they outlive a render by a
+  wide margin (120s, checked every 60s). The smoke test fails if the browser is
+  left with more than a handful of targets after rendering.
+
 ## 7.7.1 - 2026-08-20
 
 - Log fatal errors synchronously before exiting. An `uncaughtException` or

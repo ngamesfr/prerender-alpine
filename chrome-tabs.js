@@ -63,10 +63,47 @@ function getBrowser(browser, url) {
     return pending;
 }
 
+// prerender's 60s watchdog drops a hung request without closing its tab. That used
+// to leak a whole browser context; now it leaves an about:blank target in the shared
+// one, where Chrome packs same-site targets into a handful of renderers and a stuck
+// page starves every render sharing its main thread. Prod reached 41 of them.
+const REAP_AFTER_MS = 120000;
+const REAP_EVERY_MS = 60000;
+const openedAt = new Map();
+
+async function reapOrphanedTargets() {
+    if (!browserPromise) {
+        return;
+    }
+
+    const browser = await browserPromise;
+    const cutoff = Date.now() - REAP_AFTER_MS;
+
+    for (const [targetId, createdAt] of openedAt) {
+        if (createdAt > cutoff) {
+            continue;
+        }
+
+        openedAt.delete(targetId);
+
+        try {
+            await browser.Target.closeTarget({ targetId });
+            util.log('closed orphaned target', targetId);
+        } catch (err) {
+            util.log('unable to close orphaned target', targetId, err);
+        }
+    }
+}
+
+setInterval(() => {
+    reapOrphanedTargets().catch((err) => util.log('target reaper failed', err));
+}, REAP_EVERY_MS).unref();
+
 const connect = chrome.connect;
 
 chrome.connect = function () {
     browserPromise = null;
+    openedAt.clear();
 
     return connect.call(this);
 };
@@ -75,6 +112,9 @@ chrome.openTab = async function (options) {
     const url = options.url;
     const browser = await getBrowser(this, url);
     const { targetId } = await browser.Target.createTarget({ url: 'about:blank' });
+
+    openedAt.set(targetId, Date.now());
+
     const tab = await connectWithRetry(targetId, this.options.browserDebuggingPort, url);
 
     tab.browser = browser;
@@ -95,6 +135,8 @@ chrome.openTab = async function (options) {
 };
 
 chrome.closeTab = async function (tab) {
+    openedAt.delete(tab.target);
+
     try {
         await tab.browser.Target.closeTarget({ targetId: tab.target });
     } finally {
