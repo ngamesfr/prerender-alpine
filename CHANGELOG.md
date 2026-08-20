@@ -1,5 +1,14 @@
 # Changelog
 
+## 7.7.1 - 2026-08-20
+
+- Log fatal errors synchronously before exiting. An `uncaughtException` or
+  `unhandledRejection` writes its stack to stderr via `fs.writeSync(2, ...)` and
+  then exits 1, preserving Node's default exit code. Production hit a silent exit
+  1 with no output at all: `console.error` writes to the container pipe
+  asynchronously, so a process that exits immediately loses its own stack trace
+  and the crash is undiagnosable from the logs.
+
 ## 7.7.0 - 2026-08-20
 
 - Renders now reuse the default browser context and a single browser-level CDP
