@@ -1,5 +1,22 @@
 # Changelog
 
+## 7.10.0 - 2026-08-20
+
+- Render with `chromium-headless-shell` instead of full `chromium`. Chrome 132 removed
+  old headless, so `--headless` now starts a complete browser: production showed a
+  `--top-chrome-webui` renderer, crashpad handlers and three idle DevTools targets that
+  no prerender needs. The browser process deadlocks partway through creating a target
+  in that architecture, blocked writing to a child, which is the failure this image has
+  been working around since 7.7.0.
+- headless-shell is the continuation of old headless at the same version and the same
+  security patches, so nothing regresses on currency. It idles at 5 chromium processes
+  against 10, holds no targets at rest against 3, and the image drops from 1.31GB to
+  1.16GB.
+- `--headless` is dropped from the flags, since the shell is only ever headless.
+- The smoke test counted open targets with `grep -c`, which exits 1 on zero matches and
+  under `set -e` failed the run. It only ever surfaced on headless-shell, which idles at
+  zero targets, but it would equally have broken a legitimately empty full-Chrome run.
+
 ## 7.9.0 - 2026-08-20
 
 - Report render health to the liveness probe. Chrome can degrade while the DevTools
