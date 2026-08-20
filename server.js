@@ -3,6 +3,8 @@
 const prerender = require('prerender');
 const prMemoryCache = require('prerender-memory-cache');
 
+require('./chrome-tabs');
+
 const server = prerender({
     chromeFlags: ['--no-sandbox', '--headless', '--disable-gpu', '--remote-debugging-port=9222', '--hide-scrollbars', '--disable-dev-shm-usage'],
     chromeLocation: '/usr/bin/chromium-browser'

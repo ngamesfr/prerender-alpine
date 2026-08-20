@@ -56,3 +56,9 @@ grep --fixed-strings --quiet 'rendered-content' <<<"${basic_response}"
 
 blocked_response="$(curl_render block-resources)"
 grep --fixed-strings --quiet 'fetch-blocked:true image-blocked:true' <<<"${blocked_response}"
+
+# Renders share one browser context, so a leak here would carry state between crawls.
+for _ in 1 2; do
+    storage_response="$(curl_render storage)"
+    grep --fixed-strings --quiet 'storage-seen:false cookie-seen:false' <<<"${storage_response}"
+done

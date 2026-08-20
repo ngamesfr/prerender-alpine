@@ -49,6 +49,26 @@ const blockResourcesFixture = `<!doctype html>
 </body>
 </html>`;
 
+const storageFixture = `<!doctype html>
+<html>
+<body>
+    <div id="result">waiting</div>
+    <script>
+        window.prerenderReady = false;
+
+        const storageSeen = localStorage.getItem('smoke-visited') === 'true';
+        const cookieSeen = document.cookie.includes('smoke-visited=true');
+
+        localStorage.setItem('smoke-visited', 'true');
+        document.cookie = 'smoke-visited=true';
+
+        document.getElementById('result').textContent =
+            'storage-seen:' + storageSeen + ' cookie-seen:' + cookieSeen;
+        window.prerenderReady = true;
+    </script>
+</body>
+</html>`;
+
 const pixel = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64'
@@ -64,6 +84,12 @@ http.createServer((request, response) => {
     if (request.url === '/block-resources') {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         response.end(blockResourcesFixture);
+        return;
+    }
+
+    if (request.url === '/storage') {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end(storageFixture);
         return;
     }
 

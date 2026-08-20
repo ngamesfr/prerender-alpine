@@ -16,6 +16,7 @@ WORKDIR "/home/node"
 COPY ./package.json ./package-lock.json ./
 COPY ./server.js .
 COPY ./s3-cache.js .
+COPY ./chrome-tabs.js .
 
 # install npm packages and clear cache
 RUN npm ci --omit=dev \

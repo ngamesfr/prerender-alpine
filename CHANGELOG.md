@@ -1,5 +1,21 @@
 # Changelog
 
+## 7.7.0 - 2026-08-20
+
+- Renders now reuse the default browser context and a single browser-level CDP
+  connection. The stock `openTab` built a throwaway browser context per request,
+  which makes Chrome fork a renderer set and wire a fresh network context and
+  storage partition every time, then tore it all down along with two websockets.
+  Chrome 151 deadlocks the browser process partway through that setup, blocked in
+  a socket write to a child (`wchan=sock_alloc_send_pskb`, zero context switches
+  for the 43s until the container was killed). Port 9222 stops answering, so
+  `openTab` and the DevTools endpoint hang together and only a restart recovers:
+  observed at ~25 container restarts per day against ~8/day on Chrome 150.
+- Because the default context outlives the render, cookies and storage are now
+  cleared for the target origin before each page loads; the discarded context used
+  to give that isolation for free. The smoke test renders the same page twice and
+  fails if either render sees the other's state.
+
 ## 7.6.0 - 2026-08-05
 
 - Bound the S3 cache client: 500ms connection timeout, 1s request timeout, and no
