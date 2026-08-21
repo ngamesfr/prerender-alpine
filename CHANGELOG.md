@@ -1,5 +1,25 @@
 # Changelog
 
+## 7.11.0 - 2026-08-21
+
+- Pin the base image to `node:24-alpine3.23`, which carries Chromium 149 instead of
+  151. Container restarts track the Chromium version closely: ~3/day across 13-16
+  August on 150 (5, 0, 7, 1) against ~20/day across 17-20 August on 151 (17, 16, 26,
+  23), with the step landing exactly on the version bump. The deadlock predates 151,
+  so this is not expected to remove it, only to return it to the rate it ran at before.
+- This trades currency for stability and is deliberate. Pinning the branch freezes the
+  whole userland, not just Chromium, and 149 is two majors behind. Undo by restoring
+  `FROM node:24-alpine`; nothing else depends on the pin.
+- 149 was never run here: production went 150 then 151. It is the closest available
+  proxy, since Alpine keeps only the current Chromium per branch and 150 is gone from
+  3.24.
+- Reverts 7.10.0, which was merged but never released. `chromium-headless-shell` idled
+  leaner but collapsed under load: against full Chromium on identical code, URLs and
+  concurrency it managed 211 renders before wedging permanently at 90 seconds, where
+  Chromium did 1471 with zero abandoned. Pages timed out holding 22-23 intercepted
+  requests, so the deprecated `Network` interception path stops being serviced there.
+  Disabling `BLOCK_RESOURCES` avoided it, which isolates interception as the trigger.
+
 ## 7.10.0 - 2026-08-20
 
 - Render with `chromium-headless-shell` instead of full `chromium`. Chrome 132 removed

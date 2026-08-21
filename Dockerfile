@@ -1,6 +1,6 @@
-FROM node:24-alpine
+FROM node:24-alpine3.23
 
-ENV CHROME_BIN=/usr/bin/chromium-headless-shell
+ENV CHROME_BIN=/usr/bin/chromium-browser
 ENV CHROME_PATH=/usr/lib/chromium/
 ENV MEMORY_CACHE=0
 ENV BLOCK_RESOURCES=0
@@ -8,7 +8,7 @@ ENV BLOCK_RESOURCES=0
 # install chromium, tini
 ARG SECURITY_REFRESH=manual
 RUN test -n "${SECURITY_REFRESH}" \
- && apk add --no-cache chromium-headless-shell tini
+ && apk add --no-cache chromium tini
 
 USER node
 WORKDIR "/home/node"
