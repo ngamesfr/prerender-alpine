@@ -1,5 +1,29 @@
 # Changelog
 
+## 7.12.0 - 2026-08-21
+
+- Serialise `Target.createTarget` and give it a 10s timeout. Every wedge observed so
+  far begins on a burst of concurrent creations: three renders log `getting`, none
+  reaches `Start loading page`, and the browser never creates a target again. The
+  watchdog only notices 60 seconds later, which is why the abandoned-target close
+  looked causal in the logs when it is a downstream symptom. Creation is a few tens of
+  ms, so queueing costs little, and the timeout turns a hang into a failed render
+  rather than a slot held for the library's full 60s.
+- Count a render that never obtained a tab as unhealthy. `usedChrome` is now set before
+  the first call that can hang, so a browser that stops handing out targets trips the
+  health marker instead of being invisible to it.
+- Replace the bundled `blockResources` with a `Fetch`-domain version. The original
+  drives `Network.setRequestInterception`, deprecated for years, and never calls
+  `next()` if enabling fails, hanging the render outright.
+- Release the interception queue before destroying a target: `Fetch.disable()`, then
+  `Page.stopLoading()`, then detach, then close, each capped at 2s. Detaching listeners
+  first, as teardown did since 7.7.4, guarantees a paused request is never answered,
+  and closing a target on top of one is a documented way to deadlock the browser.
+- None of this fixes the deadlock itself, which lives inside Chrome and reproduces only
+  in production. It removes the trigger's concurrency, fails fast when it still happens,
+  and makes the health marker see it. Judge it on restarts per day against the ~29/day
+  measured on 149 and 151 alike.
+
 ## 7.11.0 - 2026-08-21
 
 - Pin the base image to `node:24-alpine3.23`, which carries Chromium 149 instead of

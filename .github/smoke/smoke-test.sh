@@ -36,6 +36,7 @@ docker run --detach \
     --network "${network}" \
     --publish 127.0.0.1:3000:3000 \
     --env BLOCK_RESOURCES=1 \
+    --env PAGE_LOAD_TIMEOUT=3000 \
     "${image}" >/dev/null
 
 curl_render() {
@@ -61,6 +62,15 @@ grep --fixed-strings --quiet 'fetch-blocked:true image-blocked:true' <<<"${block
 for _ in 1 2; do
     storage_response="$(curl_render storage)"
     grep --fixed-strings --quiet 'storage-seen:false cookie-seen:false' <<<"${storage_response}"
+done
+
+# A render torn down while a request is still paused in the interception queue used
+# to deadlock the browser process. Abandon one, then prove the browser still renders.
+curl --silent --output /dev/null --max-time 60 "http://localhost:3000/http://fixture:8080/hang" || true
+
+for _ in 1 2; do
+    recovered_response="$(curl_render basic)"
+    grep --fixed-strings --quiet 'rendered-content' <<<"${recovered_response}"
 done
 
 # Targets share renderer processes, so a leaked tab starves every render sitting in

@@ -65,19 +65,32 @@ function getBrowser(browser, url) {
     return pending;
 }
 
-// blockResources answers intercepted requests without awaiting them, so an event
-// landing mid-teardown sends on a closing socket and rejects with nobody listening,
-// which takes the process down. Detaching first means the handler cannot fire.
+// Every teardown step talks to a browser that may already be wedged, and a hang here
+// would strand the render slot it is trying to free.
+const TEARDOWN_TIMEOUT = 2000;
+
+function teardownStep(run, label, targetId) {
+    return Promise.race([
+        Promise.resolve().then(run),
+        new Promise((resolve) => setTimeout(resolve, TEARDOWN_TIMEOUT))
+    ]).catch((err) => util.log('teardown step failed', label, targetId, err));
+}
+
+// Closing a target still holding a paused request deadlocks the browser process in a
+// write to its renderer, and detaching the listeners first guarantees nobody will ever
+// answer that request. So release the queue before letting go of it.
 async function discardTab(targetId, tab, browser) {
     if (tab) {
+        await teardownStep(() => tab.Fetch.disable(), 'Fetch.disable', targetId);
+        await teardownStep(() => tab.Page.stopLoading(), 'Page.stopLoading', targetId);
         tab.removeAllListeners();
     }
 
     try {
-        await browser.Target.closeTarget({ targetId });
+        await teardownStep(() => browser.Target.closeTarget({ targetId }), 'Target.closeTarget', targetId);
     } finally {
         if (tab) {
-            await tab.close();
+            await teardownStep(() => tab.close(), 'tab.close', targetId);
         }
     }
 }
@@ -103,10 +116,11 @@ server.removeRequestFromInFlight = function (req) {
     }
 
     // Called again from the chain's finally, and skipped for cache hits, which never
-    // reach Chrome and so say nothing about whether it still renders.
+    // reach Chrome and so say nothing about whether it still renders. A render that
+    // never got a tab failed just as surely as one that was abandoned holding it.
     if (prerender && prerender.usedChrome && !prerender.outcomeRecorded) {
         prerender.outcomeRecorded = true;
-        health.recordOutcome(abandoned);
+        health.recordOutcome(Boolean(abandoned) || !prerender.tab);
     }
 
     return removeRequestFromInFlight.call(this, req);
@@ -129,15 +143,43 @@ chrome.connect = function () {
     return connect.call(this);
 };
 
+// Chrome deadlocks inside Target.createTarget when several arrive together, blocked
+// writing to a renderer, and never recovers: every wedge so far began on a burst of
+// concurrent creations, a full minute before the watchdog noticed. Serialising them
+// removes that concurrency, and the timeout turns a hang into a fast failure rather
+// than a render slot held for the library's whole 60s.
+const CREATE_TARGET_TIMEOUT = 10000;
+
+let createQueue = Promise.resolve();
+
+function createTarget(browser, url) {
+    const next = createQueue.catch(() => {}).then(() =>
+        Promise.race([
+            browser.Target.createTarget({ url: 'about:blank' }),
+            new Promise((resolve, reject) => {
+                setTimeout(() => reject(new Error(`Target.createTarget timed out after ${CREATE_TARGET_TIMEOUT}ms for ${url}`)), CREATE_TARGET_TIMEOUT);
+            })
+        ])
+    );
+
+    createQueue = next.catch(() => {});
+
+    return next;
+}
+
 chrome.openTab = async function (options) {
     const url = options.url;
+
+    // Set before the first thing that can hang, so a render that never gets a target
+    // still reaches the health marker as a failure.
+    options.usedChrome = true;
+
     const browser = await getBrowser(this, url);
-    const { targetId } = await browser.Target.createTarget({ url: 'about:blank' });
+    const { targetId } = await createTarget(browser, url);
 
     // Own the target from the moment it exists: the library only records it once
     // openTab resolves, so a hang in here would otherwise leave nobody to close it.
     options.targetId = targetId;
-    options.usedChrome = true;
 
     const tab = await connectWithRetry(targetId, this.options.browserDebuggingPort, url);
 
