@@ -17,6 +17,7 @@ COPY ./package.json ./package-lock.json ./
 COPY ./server.js .
 COPY ./s3-cache.js .
 COPY ./chrome-tabs.js .
+COPY ./block-resources.js .
 COPY ./health.js .
 
 # install npm packages and clear cache

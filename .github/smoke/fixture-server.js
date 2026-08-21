@@ -69,6 +69,19 @@ const storageFixture = `<!doctype html>
 </body>
 </html>`;
 
+const hangFixture = `<!doctype html>
+<html>
+<body>
+    <div id="result">waiting</div>
+    <script>
+        window.prerenderReady = false;
+        // Never answered, so the render is torn down while this sits paused in the
+        // interception queue: the exact state that used to deadlock the browser.
+        fetch('/never');
+    </script>
+</body>
+</html>`;
+
 const pixel = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     'base64'
@@ -90,6 +103,17 @@ http.createServer((request, response) => {
     if (request.url === '/storage') {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         response.end(storageFixture);
+        return;
+    }
+
+    if (request.url === '/hang') {
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        response.end(hangFixture);
+        return;
+    }
+
+    if (request.url === '/never') {
+        // Deliberately no response and no close: hold the request open.
         return;
     }
 

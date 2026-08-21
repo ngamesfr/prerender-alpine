@@ -27,7 +27,7 @@ const server = prerender({
 
 const blockResources = Number(process.env.BLOCK_RESOURCES) || 0;
 if (blockResources === 1) {
-    server.use(prerender.blockResources());
+    server.use(require('./block-resources'));
 }
 
 const memCache = Number(process.env.MEMORY_CACHE) || 0;
